@@ -49,13 +49,17 @@ function generateId(): string {
 }
 
 // Constants
-const MAX_CONTENT_LENGTH = 50000 // ~50KB max per memory
+const MAX_CONTENT_BYTES = 50000 // 50KB max per memory (bytes, not chars)
 const EMBED_RETRY_COUNT = 3
 const EMBED_RETRY_DELAY_MS = 1000
 
 function sanitizeId(id: string): string {
-	// Escape quotes to prevent SQL injection in LanceDB queries
-	return id.replace(/"/g, '\\"').replace(/'/g, "\\'")
+	// Escape for SQL injection in LanceDB queries
+	// Must escape backslashes FIRST, then quotes
+	return id
+		.replace(/\\/g, "\\\\")
+		.replace(/"/g, '\\"')
+		.replace(/'/g, "\\'")
 }
 
 export class LocalMemoryClient {
@@ -82,7 +86,11 @@ export class LocalMemoryClient {
 
 	private async ensureInitialized(): Promise<void> {
 		if (!this.initPromise) {
-			this.initPromise = this.doInit()
+			this.initPromise = this.doInit().catch((err) => {
+				// Reset promise on failure to allow retry
+				this.initPromise = null
+				throw err
+			})
 		}
 		return this.initPromise
 	}
@@ -114,7 +122,10 @@ export class LocalMemoryClient {
 				lastError = err instanceof Error ? err : new Error(String(err))
 				log.warn(`embed attempt ${attempt + 1} failed: ${lastError.message}`)
 				if (attempt < EMBED_RETRY_COUNT - 1) {
-					await new Promise((r) => setTimeout(r, EMBED_RETRY_DELAY_MS * (attempt + 1)))
+					// Exponential backoff with jitter to prevent thundering herd
+					const jitter = 0.5 + Math.random() * 0.5
+					const delay = EMBED_RETRY_DELAY_MS * (attempt + 1) * jitter
+					await new Promise((r) => setTimeout(r, delay))
 				}
 			}
 		}
@@ -152,8 +163,9 @@ export class LocalMemoryClient {
 
 		const cleaned = content.trim()
 		if (!cleaned) throw new Error("Cannot store empty content")
-		if (cleaned.length > MAX_CONTENT_LENGTH) {
-			throw new Error(`Content too large (${cleaned.length} chars, max ${MAX_CONTENT_LENGTH})`)
+		const byteLength = Buffer.byteLength(cleaned, "utf-8")
+		if (byteLength > MAX_CONTENT_BYTES) {
+			throw new Error(`Content too large (${byteLength} bytes, max ${MAX_CONTENT_BYTES})`)
 		}
 
 		log.debugRequest("add", {
@@ -354,7 +366,8 @@ export class LocalMemoryClient {
 
 	async close(): Promise<void> {
 		if (this.db) {
-			// LanceDB doesn't have explicit close, but we can clean up references
+			// LanceDB uses memory-mapped files; setting refs to null helps GC
+			// and releases file handles. LanceDB doesn't expose explicit close().
 			this.table = null
 			this.db = null
 			this.initPromise = null

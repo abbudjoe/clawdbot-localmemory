@@ -1,0 +1,29 @@
+{
+	"name": "@clawdbot/localmemory",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "Clawdbot local memory plugin using Ollama embeddings + LanceDB",
+	"license": "MIT",
+	"dependencies": {
+		"@lancedb/lancedb": "^0.13.0",
+		"ollama": "^0.5.11",
+		"apache-arrow": "^18.0.0",
+		"@sinclair/typebox": "0.34.47"
+	},
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"lint": "bunx @biomejs/biome ci .",
+		"lint:fix": "bunx @biomejs/biome check --write ."
+	},
+	"peerDependencies": {
+		"clawdbot": ">=2026.1.24"
+	},
+	"clawdbot": {
+		"extensions": [
+			"./index.ts"
+		]
+	},
+	"devDependencies": {
+		"typescript": "^5.9.3"
+	}
+}

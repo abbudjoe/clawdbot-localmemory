@@ -1,0 +1,76 @@
+{
+	"id": "clawdbot-localmemory",
+	"kind": "memory",
+	"uiHints": {
+		"ollamaHost": {
+			"label": "Ollama Host",
+			"placeholder": "http://127.0.0.1:11434",
+			"help": "Ollama server URL (default: http://127.0.0.1:11434)",
+			"advanced": true
+		},
+		"ollamaModel": {
+			"label": "Embedding Model",
+			"placeholder": "nomic-embed-text",
+			"help": "Ollama embedding model to use (default: nomic-embed-text)"
+		},
+		"dbPath": {
+			"label": "Database Path",
+			"placeholder": "~/.clawdbot/memory/lancedb",
+			"help": "Path to LanceDB database. Default: ~/.clawdbot/memory/{hostname}/lancedb",
+			"advanced": true
+		},
+		"profilePath": {
+			"label": "Profile Path",
+			"placeholder": "~/.clawdbot/memory/profile.json",
+			"help": "Path to user profile JSON. Default: ~/.clawdbot/memory/{hostname}/profile.json",
+			"advanced": true
+		},
+		"autoRecall": {
+			"label": "Auto-Recall",
+			"help": "Inject relevant memories + user profile before every AI turn"
+		},
+		"autoCapture": {
+			"label": "Auto-Capture",
+			"help": "Automatically store important information from conversations"
+		},
+		"maxRecallResults": {
+			"label": "Max Recall Results",
+			"placeholder": "10",
+			"help": "Maximum memories injected into context per turn",
+			"advanced": true
+		},
+		"profileFrequency": {
+			"label": "Profile Injection Frequency",
+			"placeholder": "50",
+			"help": "Inject full profile (static + dynamic) every N turns. Search results are injected every turn.",
+			"advanced": true
+		},
+		"captureMode": {
+			"label": "Capture Mode",
+			"help": "'all' (default) = filter out short texts and injected context, 'everything' = capture all messages",
+			"advanced": true
+		},
+		"debug": {
+			"label": "Debug Logging",
+			"help": "Enable verbose debug logs for embeddings and database operations",
+			"advanced": true
+		}
+	},
+	"configSchema": {
+		"type": "object",
+		"additionalProperties": false,
+		"properties": {
+			"ollamaHost": { "type": "string" },
+			"ollamaModel": { "type": "string" },
+			"dbPath": { "type": "string" },
+			"profilePath": { "type": "string" },
+			"autoRecall": { "type": "boolean" },
+			"autoCapture": { "type": "boolean" },
+			"maxRecallResults": { "type": "number", "minimum": 1, "maximum": 20 },
+			"profileFrequency": { "type": "number", "minimum": 1, "maximum": 500 },
+			"captureMode": { "type": "string", "enum": ["everything", "all"] },
+			"debug": { "type": "boolean" }
+		},
+		"required": []
+	}
+}

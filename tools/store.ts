@@ -5,7 +5,6 @@ import type { LocalMemoryClient } from "../client.ts"
 import type { LocalMemoryConfig } from "../config.ts"
 import { log } from "../logger.ts"
 import {
-	buildDocumentId,
 	detectCategory,
 	MEMORY_CATEGORIES,
 } from "../memory.ts"
@@ -14,7 +13,7 @@ export function registerStoreTool(
 	api: ClawdbotPluginApi,
 	client: LocalMemoryClient,
 	_cfg: LocalMemoryConfig,
-	getSessionKey: () => string | undefined,
+	_getSessionKey: () => string | undefined,
 ): void {
 	api.registerTool(
 		{
@@ -30,15 +29,13 @@ export function registerStoreTool(
 				params: { text: string; category?: string },
 			) {
 				const category = params.category ?? detectCategory(params.text)
-				const sk = getSessionKey()
-				const customId = sk ? buildDocumentId(sk) : undefined
 
-				log.debug(`store tool: category="${category}" customId="${customId}"`)
+				log.debug(`store tool: category="${category}"`)
 
+				// Don't use customId - each memory should be unique, not overwritten
 				await client.addMemory(
 					params.text,
 					{ type: category, source: "clawdbot_tool" },
-					customId,
 				)
 
 				const preview =

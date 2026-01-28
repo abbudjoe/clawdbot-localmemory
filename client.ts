@@ -48,17 +48,14 @@ function generateId(): string {
 	return `mem_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-	if (a.length !== b.length) return 0
-	let dot = 0
-	let normA = 0
-	let normB = 0
-	for (let i = 0; i < a.length; i++) {
-		dot += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-	return dot / (Math.sqrt(normA) * Math.sqrt(normB))
+// Constants
+const MAX_CONTENT_LENGTH = 50000 // ~50KB max per memory
+const EMBED_RETRY_COUNT = 3
+const EMBED_RETRY_DELAY_MS = 1000
+
+function sanitizeId(id: string): string {
+	// Escape quotes to prevent SQL injection in LanceDB queries
+	return id.replace(/"/g, '\\"').replace(/'/g, "\\'")
 }
 
 export class LocalMemoryClient {
@@ -68,7 +65,7 @@ export class LocalMemoryClient {
 	private profilePath: string
 	private db: lancedb.Connection | null = null
 	private table: lancedb.Table | null = null
-	private initialized = false
+	private initPromise: Promise<void> | null = null
 
 	constructor(
 		ollamaHost: string,
@@ -84,8 +81,13 @@ export class LocalMemoryClient {
 	}
 
 	private async ensureInitialized(): Promise<void> {
-		if (this.initialized) return
+		if (!this.initPromise) {
+			this.initPromise = this.doInit()
+		}
+		return this.initPromise
+	}
 
+	private async doInit(): Promise<void> {
 		await mkdir(dirname(this.dbPath), { recursive: true })
 		await mkdir(dirname(this.profilePath), { recursive: true })
 
@@ -96,16 +98,27 @@ export class LocalMemoryClient {
 			this.table = await this.db.openTable("memories")
 		}
 
-		this.initialized = true
 		log.debug("database initialized")
 	}
 
 	private async embed(text: string): Promise<number[]> {
-		const response = await this.ollama.embed({
-			model: this.model,
-			input: text,
-		})
-		return response.embeddings[0]
+		let lastError: Error | null = null
+		for (let attempt = 0; attempt < EMBED_RETRY_COUNT; attempt++) {
+			try {
+				const response = await this.ollama.embed({
+					model: this.model,
+					input: text,
+				})
+				return response.embeddings[0]
+			} catch (err) {
+				lastError = err instanceof Error ? err : new Error(String(err))
+				log.warn(`embed attempt ${attempt + 1} failed: ${lastError.message}`)
+				if (attempt < EMBED_RETRY_COUNT - 1) {
+					await new Promise((r) => setTimeout(r, EMBED_RETRY_DELAY_MS * (attempt + 1)))
+				}
+			}
+		}
+		throw lastError ?? new Error("Embedding failed after retries")
 	}
 
 	private async ensureTable(vectorDim: number): Promise<lancedb.Table> {
@@ -126,7 +139,7 @@ export class LocalMemoryClient {
 			mode: "overwrite",
 		})
 
-		await this.table.delete('id = "__init__"')
+		await this.table.delete(`id = "${sanitizeId("__init__")}"`)  // Safe: constant value
 		return this.table
 	}
 
@@ -139,6 +152,9 @@ export class LocalMemoryClient {
 
 		const cleaned = content.trim()
 		if (!cleaned) throw new Error("Cannot store empty content")
+		if (cleaned.length > MAX_CONTENT_LENGTH) {
+			throw new Error(`Content too large (${cleaned.length} chars, max ${MAX_CONTENT_LENGTH})`)
+		}
 
 		log.debugRequest("add", {
 			contentLength: cleaned.length,
@@ -163,7 +179,8 @@ export class LocalMemoryClient {
 
 		if (customId) {
 			try {
-				await table.delete(`id = "${customId}"`)
+				const safeId = sanitizeId(customId)
+				await table.delete(`id = "${safeId}"`)
 			} catch {
 				// Ignore if not found
 			}
@@ -291,7 +308,8 @@ export class LocalMemoryClient {
 		if (!this.table) return
 
 		log.debugRequest("delete", { id })
-		await this.table.delete(`id = "${id}"`)
+		const safeId = sanitizeId(id)
+		await this.table.delete(`id = "${safeId}"`)
 		log.debugResponse("delete", { success: true })
 	}
 
@@ -332,5 +350,15 @@ export class LocalMemoryClient {
 
 	getDbPath(): string {
 		return this.dbPath
+	}
+
+	async close(): Promise<void> {
+		if (this.db) {
+			// LanceDB doesn't have explicit close, but we can clean up references
+			this.table = null
+			this.db = null
+			this.initPromise = null
+			log.debug("database connection closed")
+		}
 	}
 }

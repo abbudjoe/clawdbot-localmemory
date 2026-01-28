@@ -61,7 +61,8 @@ export default {
 			start: () => {
 				api.logger.info("localmemory: connected")
 			},
-			stop: () => {
+			stop: async () => {
+				await client.close()
 				api.logger.info("localmemory: stopped")
 			},
 		})

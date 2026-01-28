@@ -1,7 +1,6 @@
 import type { LocalMemoryClient } from "../client.ts"
 import type { LocalMemoryConfig } from "../config.ts"
 import { log } from "../logger.ts"
-import { buildDocumentId } from "../memory.ts"
 
 function getLastTurn(messages: unknown[]): unknown[] {
 	let lastUserIdx = -1
@@ -22,7 +21,7 @@ function getLastTurn(messages: unknown[]): unknown[] {
 export function buildCaptureHandler(
 	client: LocalMemoryClient,
 	cfg: LocalMemoryConfig,
-	getSessionKey: () => string | undefined,
+	_getSessionKey: () => string | undefined,
 ) {
 	return async (event: Record<string, unknown>) => {
 		if (
@@ -79,18 +78,16 @@ export function buildCaptureHandler(
 		if (captured.length === 0) return
 
 		const content = captured.join("\n\n")
-		const sk = getSessionKey()
-		const customId = sk ? buildDocumentId(sk) : undefined
 
 		log.debug(
-			`capturing ${captured.length} texts (${content.length} chars) → ${customId ?? "no-session-key"}`,
+			`capturing ${captured.length} texts (${content.length} chars)`,
 		)
 
 		try {
+			// Don't use customId - each capture should be stored uniquely, not overwritten
 			await client.addMemory(
 				content,
-				{ source: "clawdbot", timestamp: new Date().toISOString() },
-				customId,
+				{ source: "clawdbot_capture", timestamp: new Date().toISOString() },
 			)
 		} catch (err) {
 			log.error("capture failed", err)

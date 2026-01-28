@@ -2,13 +2,13 @@ import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk"
 import type { LocalMemoryClient } from "../client.ts"
 import type { LocalMemoryConfig } from "../config.ts"
 import { log } from "../logger.ts"
-import { buildDocumentId, detectCategory } from "../memory.ts"
+import { detectCategory } from "../memory.ts"
 
 export function registerCommands(
 	api: ClawdbotPluginApi,
 	client: LocalMemoryClient,
 	_cfg: LocalMemoryConfig,
-	getSessionKey: () => string | undefined,
+	_getSessionKey: () => string | undefined,
 ): void {
 	api.registerCommand({
 		name: "remember",
@@ -25,11 +25,10 @@ export function registerCommands(
 
 			try {
 				const category = detectCategory(text)
-				const sk = getSessionKey()
+				// Don't use customId - each memory should be unique
 				await client.addMemory(
 					text,
 					{ type: category, source: "clawdbot_command" },
-					sk ? buildDocumentId(sk) : undefined,
 				)
 
 				const preview = text.length > 60 ? `${text.slice(0, 60)}…` : text
